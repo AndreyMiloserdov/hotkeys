@@ -1,5 +1,5 @@
 {
-  "name": "hotkeys-js",
+  "name": "@hotkeys/manager",
   "description": "A simple micro-library for defining and dispatching keyboard shortcuts. It has no dependencies.",
   "version": "3.8.1",
   "main": "index.js",
@@ -37,12 +37,12 @@
     "shortcuts",
     "keypress"
   ],
-  "author": "kenny wong <wowohoo@qq.com>",
+  "author": "kenny wong <wowohoo@qq.com>, patched by andrey miloserdov <andrey.miloserdov@yahoo.com>",
   "license": "MIT",
-  "homepage": "http://jaywcjlove.github.io/hotkeys",
+  "homepage": "",
   "repository": {
     "type": "git",
-    "url": "https://github.com/jaywcjlove/hotkeys.git"
+    "url": "https://github.com/AndreyMiloserdov/hotkeys.git"
   },
   "jest": {
     "testURL": "http://localhost/"
