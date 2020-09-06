@@ -1,5 +1,7 @@
 import { isff } from './utils';
 
+const _splitKey = '+';
+
 // Special Keys
 const _keyMap = {
   backspace: 8,
@@ -79,4 +81,4 @@ for (let k = 1; k < 20; k++) {
   _keyMap[`f${k}`] = 111 + k;
 }
 
-export { _keyMap, _modifier, modifierMap, _mods, _handlers };
+export { _keyMap, _modifier, modifierMap, _mods, _handlers, _splitKey };

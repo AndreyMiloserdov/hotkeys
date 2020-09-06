@@ -49,10 +49,19 @@ function isInteger(value) {
   return typeof value === 'number' && Number.isFinite(value) && Math.floor(value) === value;
 }
 
+// validate key: any[] as keys: number[]
+function getCommandKeys(key) {
+  return key.reduce((keys, code) => {
+    if (isInteger(code)) keys.push(code);
+    return keys;
+  }, []);
+}
+
 export {
   isff,
   getMods,
   getKeys,
+  getCommandKeys,
   addEvent,
   compareArray,
   isInteger,

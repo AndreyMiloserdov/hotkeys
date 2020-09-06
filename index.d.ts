@@ -19,9 +19,9 @@ export type Options = {
 }
 
 interface Hotkeys {
-  (key: string, method: KeyHandler): void
-  (key: string, scope: string, method: KeyHandler): void
-  (key: string, options: Options, method: KeyHandler): void
+  (key: string | number[], method: KeyHandler): void
+  (key: string | number[], scope: string, method: KeyHandler): void
+  (key: string | number[], options: Options, method: KeyHandler): void
 
   shift: boolean
   ctrl: boolean
@@ -37,10 +37,10 @@ interface Hotkeys {
 
   noConflict(): void
 
-  unbind(key: string): void
-  unbind(key: string, scopeName: string): void
-  unbind(key: string, scopeName: string, method: KeyHandler): void
-  unbind(key: string, method: KeyHandler): void
+  unbind(key: string | number[]): void
+  unbind(key: string | number[], scopeName: string): void
+  unbind(key: string | number[], scopeName: string, method: KeyHandler): void
+  unbind(key: string | number[], method: KeyHandler): void
 
   isPressed(keyCode: number): boolean
   isPressed(keyCode: string): boolean

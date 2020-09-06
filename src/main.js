@@ -1,5 +1,5 @@
-import { addEvent, getMods, getKeys, compareArray, isInteger } from './utils';
-import { _keyMap, _modifier, modifierMap, _mods, _handlers } from './var';
+import { addEvent, getMods, getKeys, getCommandKeys, compareArray, isInteger } from './utils';
+import { _keyMap, _modifier, modifierMap, _mods, _handlers, _splitKey } from './var';
 
 let _downKeys = []; // 记录摁下的绑定键
 const _customKeyMap = {};
@@ -38,7 +38,7 @@ function addCustomKeyMap(keyMapPatch) {
 
     if (isInteger(keyCode)) {
       _keyMapPatch[key] = keyCode;
-    } else if (module.hot) {
+    } else {
       window.console.warning(`[hotkeys-js] (addCustomKeyMap) key "${key}" has wrong value type, ignored`);
     }
   });
@@ -121,15 +121,12 @@ function unbind(keysInfo, ...args) {
   // unbind(), unbind all keys
   if (!keysInfo) {
     Object.keys(_handlers).forEach((key) => delete _handlers[key]);
-  } else if (Array.isArray(keysInfo)) {
+  } else if (Array.isArray(keysInfo) && !isInteger(keysInfo[0])) {
     // support like : unbind([{key: 'ctrl+a', scope: 's1'}, {key: 'ctrl-a', scope: 's2', splitKey: '-'}])
     keysInfo.forEach((info) => {
       if (info.key) eachUnbind(info);
     });
-  } else if (typeof keysInfo === 'object') {
-    // support like unbind({key: 'ctrl+a, ctrl+b', scope:'abc'})
-    if (keysInfo.key) eachUnbind(keysInfo);
-  } else if (typeof keysInfo === 'string') {
+  } else if (typeof keysInfo === 'string' || (Array.isArray(keysInfo) && isInteger(keysInfo[0]))) {
     // support old method
     // eslint-disable-line
     let [scope, method] = args;
@@ -141,25 +138,26 @@ function unbind(keysInfo, ...args) {
       key: keysInfo,
       scope,
       method,
-      splitKey: '+',
+      splitKey: _splitKey,
     });
+  } else if (typeof keysInfo === 'object') {
+    // support like unbind({key: 'ctrl+a, ctrl+b', scope:'abc'})
+    if (keysInfo.key) eachUnbind(keysInfo);
   }
 }
 
 // 解除绑定某个范围的快捷键
 const eachUnbind = ({
-  key, scope, method, splitKey = '+',
+  key, scope, method, splitKey = _splitKey,
 }) => {
-  const multipleKeys = getKeys(key);
-  multipleKeys.forEach((originKey) => {
-    const unbindKeys = originKey.split(splitKey);
-    const len = unbindKeys.length;
-    const lastKey = unbindKeys[len - 1];
-    const keyCode = lastKey === '*' ? '*' : code(lastKey);
+  if (Array.isArray(key)) {
+    const keys = getCommandKeys(key);
+    const lastIndex = keys.length - 1;
+    const keyCode = keys[lastIndex];
     if (!_handlers[keyCode]) return;
-    // 判断是否传入范围，没有就获取范围
     if (!scope) scope = getScope();
-    const mods = len > 1 ? getMods(_modifier, unbindKeys) : [];
+    const mods = lastIndex > 0 ? keys.slice(0, lastIndex) : [];
+    // todo - here have to be filter
     _handlers[keyCode] = _handlers[keyCode].map((record) => {
       // 通过函数判断，是否解除绑定，函数相等直接返回
       const isMatchingMethod = method ? record.method === method : true;
@@ -172,7 +170,31 @@ const eachUnbind = ({
       }
       return record;
     });
-  });
+  } else {
+    const multipleKeys = getKeys(key);
+    multipleKeys.forEach((originKey) => {
+      const unbindKeys = originKey.split(splitKey);
+      const len = unbindKeys.length;
+      const lastKey = unbindKeys[len - 1];
+      const keyCode = lastKey === '*' ? '*' : code(lastKey);
+      if (!_handlers[keyCode]) return;
+      // 判断是否传入范围，没有就获取范围
+      if (!scope) scope = getScope();
+      const mods = len > 1 ? getMods(_modifier, unbindKeys) : [];
+      _handlers[keyCode] = _handlers[keyCode].map((record) => {
+        // 通过函数判断，是否解除绑定，函数相等直接返回
+        const isMatchingMethod = method ? record.method === method : true;
+        if (
+          isMatchingMethod
+          && record.scope === scope
+          && compareArray(record.mods, mods)
+        ) {
+          return {};
+        }
+        return record;
+      });
+    });
+  }
 };
 
 // 对监听对应快捷键的回调函数进行处理
@@ -203,7 +225,7 @@ function eventHandler(event, handler, scope) {
         && !_mods[17]
         && !_mods[91])
       || modifiersMatch
-      || handler.shortcut === '*'
+      || handler.key === '*'
     ) {
       if (handler.method(event, handler) === false) {
         if (event.preventDefault) event.preventDefault();
@@ -318,12 +340,8 @@ function dispatch(event) {
     ) {
       if (_handlers[key][i].key) {
         const record = _handlers[key][i];
-        const { splitKey } = record;
-        const keyShortcut = record.key.split(splitKey);
-        const _downKeysCurrent = []; // 记录当前按键键值
-        for (let a = 0; a < keyShortcut.length; a++) {
-          _downKeysCurrent.push(code(keyShortcut[a]));
-        }
+        const _downKeysCurrent = record.shortcut;
+
         if (_downKeysCurrent.sort().join('') === _downKeys.sort().join('')) {
           // 找到处理内容
           eventHandler(event, record, scope);
@@ -340,14 +358,23 @@ function isElementBind(element) {
 
 function hotkeys(key, option, method) {
   _downKeys = [];
-  const keys = getKeys(key); // 需要处理的快捷键列表
+  let keys;
+  let isKeysCodeMode = false;
+
+  if (Array.isArray(key) && key.length) {
+    isKeysCodeMode = true;
+    keys = getCommandKeys(key);
+  } else {
+    keys = getKeys(key); // 需要处理的快捷键列表
+  }
+
   let mods = [];
   let scope = 'all'; // scope默认为all，所有范围都有效
   let element = document; // 快捷键事件绑定节点
   let i = 0;
   let keyup = false;
   let keydown = true;
-  let splitKey = '+';
+  let splitKey = _splitKey;
 
   // 对为设定范围的判断
   if (method === undefined && typeof option === 'function') {
@@ -364,30 +391,47 @@ function hotkeys(key, option, method) {
 
   if (typeof option === 'string') scope = option;
 
-  // 对于每个快捷键进行处理
-  for (; i < keys.length; i++) {
-    key = keys[i].split(splitKey); // 按键列表
-    mods = [];
+  if (isKeysCodeMode) {
+    const lastIndex = keys.length - 1;
+    if (lastIndex > 0) mods = keys.slice(0, lastIndex);
+    key = key[lastIndex];
 
-    // 如果是组合快捷键取得组合快捷键
-    if (key.length > 1) mods = getMods(_modifier, key);
-
-    // 将非修饰键转化为键码
-    key = key[key.length - 1];
-    key = key === '*' ? '*' : code(key); // *表示匹配所有快捷键
-
-    // 判断key是否在_handlers中，不在就赋一个空数组
     if (!(key in _handlers)) _handlers[key] = [];
     _handlers[key].push({
       keyup,
       keydown,
       scope,
       mods,
-      shortcut: keys[i],
+      shortcut: keys,
       method,
-      key: keys[i],
+      key: keys.join(splitKey),
       splitKey,
     });
+  } else {
+    // 对于每个快捷键进行处理
+    for (; i < keys.length; i++) {
+      key = keys[i].split(splitKey); // 按键列表
+
+      // 如果是组合快捷键取得组合快捷键
+      if (key.length > 1) mods = getMods(_modifier, key);
+
+      // 将非修饰键转化为键码
+      key = key[key.length - 1];
+      key = key === '*' ? '*' : code(key); // *表示匹配所有快捷键
+
+      // 判断key是否在_handlers中，不在就赋一个空数组
+      if (!(key in _handlers)) _handlers[key] = [];
+      _handlers[key].push({
+        keyup,
+        keydown,
+        scope,
+        mods,
+        shortcut: mods.concat(key),
+        method,
+        key: keys[i],
+        splitKey,
+      });
+    }
   }
   // 在全局document上设置快捷键
   if (typeof element !== 'undefined' && !isElementBind(element) && window) {
